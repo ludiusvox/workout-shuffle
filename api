@@ -1,3 +1,18 @@
 $env:OPENAI_API_KEY="sk-lm-J7Iig6MW:Sh7DIzs6mc7Ti7c1CSH9"
 $env:OPENAI_API_BASE="http://localhost:1234/v1"
 aider --model openai/unknown --no-show-model-warnings --no-auto-commits
+
+# Build the React production files
+npm run build
+
+# Sync the 'dist' folder to the 'android' folder
+npx cap sync android
+
+# Move into the android directory
+cd android
+
+# Make the gradlew script executable (just in case)
+chmod +x gradlew
+
+# Run the build
+./gradlew assembleDebug
