@@ -16,3 +16,12 @@ chmod +x gradlew
 
 # Run the build
 ./gradlew assembleDebug
+
+# Navigate to the output folder
+cd app/build/outputs/apk/debug/
+
+# Copy it to your root project folder with the new name
+cp app-debug.apk ~/workout-shuffle/workout-shuffle.apk
+
+# Go back to your project root
+cd ~/workout-shuffle

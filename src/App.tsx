@@ -46,6 +46,7 @@ function App() {
 
   const weeklyTotal = days.reduce((sum, day) => sum + calculateCalories(day), 0)
   const handleReorder = (newDays: Day[]) => setDays(newDays)
+  
   const updateDayMiles = (id: string, miles: number) => {
     setDays(days.map(d => d.id === id ? { ...d, miles } : d))
   }
@@ -66,23 +67,22 @@ function App() {
     }
   }
 
-  const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed)
-  const toggleTheme = () => setIsDarkTheme(!isDarkTheme)
-
   return (
     <div className={`app-container ${isDarkTheme ? 'dark-theme' : 'light-theme'}`}>
-      <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
-        {isDarkTheme ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
+      {/* Utility Buttons */}
+      <div className="controls-overlay" style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100, display: 'flex', gap: '0.5rem' }}>
+        <button className="theme-toggle" onClick={() => setIsDarkTheme(!isDarkTheme)}>
+          {isDarkTheme ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <button 
+          className="sidebar-toggle"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        >
+          {sidebarCollapsed ? <Menu size={24} /> : <X size={24} />}
+        </button>
+      </div>
 
-      <button 
-        className={`sidebar-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
-        onClick={toggleSidebar}
-        aria-label="Toggle sidebar"
-      >
-        {sidebarCollapsed ? <Menu size={24} /> : <X size={24} />}
-      </button>
-
+      {/* Sidebar */}
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="logo">
           <Flame size={32} />
@@ -90,14 +90,11 @@ function App() {
         </div>
 
         <div className="weight-input">
-          <label htmlFor="weight">Weight (kg)</label>
+          <label>Weight (kg)</label>
           <input 
             type="number" 
-            id="weight"
             value={weight}
             onChange={(e) => setWeight(Number(e.target.value))}
-            min="50"
-            max="300"
           />
         </div>
 
@@ -108,26 +105,20 @@ function App() {
             {!sidebarCollapsed && <span>{weeklyTotal.toLocaleString()} kcal</span>}
           </div>
         </div>
-
-        <nav className="stats-nav">
-          <div className="stat-item">
-            <Dumbbell size={16} />
-            {!sidebarCollapsed && <span>Lifting: {days.filter(d => d.type === 'Lifting').length}</span>}
-          </div>
-          <div className="stat-item">
-            <Footprints size={16} />
-            {!sidebarCollapsed && <span>Hiking: {days.filter(d => d.type === 'Hiking').length}</span>}
-          </div>
-        </nav>
       </aside>
 
+      {/* Main Content Area */}
       <main 
         className={`main-content ${sidebarCollapsed ? 'expanded' : ''}`}
-        style={{ touchAction: 'pan-y' }} // Ensures vertical scrolling is prioritized
+        style={{ 
+          padding: '1rem',
+          minHeight: '100vh',
+          touchAction: 'pan-y' // Vital for mobile scrolling
+        }}
       >
-        <header className="toolbar">
+        <header className="toolbar" style={{ marginTop: '3rem' }}>
           <h2>Weekly Schedule</h2>
-          {!sidebarCollapsed && <p>Grab the arrows to reorder</p>}
+          <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Use handles to drag</p>
         </header>
 
         <Reorder.Group 
@@ -135,62 +126,75 @@ function App() {
           values={days} 
           onReorder={handleReorder}
           className="days-list"
+          style={{ listStyle: 'none', padding: 0 }}
         >
           {days.map((day) => {
-            // Setup controls for each individual item
             const controls = useDragControls()
 
             return (
               <Reorder.Item 
                 key={day.id}
                 value={day}
-                dragListener={false} // Disable dragging on the whole card
-                dragControls={controls} // Connect to custom handle
+                dragListener={false} 
+                dragControls={controls}
                 className={`day-card ${day.type.toLowerCase()}`}
-                style={{ '--type-color': getTypeColor(day.type) } as React.CSSProperties}
+                style={{ 
+                  '--type-color': getTypeColor(day.type),
+                  position: 'relative',
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  borderRadius: '12px',
+                  background: isDarkTheme ? '#1a1a2e' : '#fff',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                } as any}
               >
-                <div className="card-header">
-                  <span className="day-name">{day.name}</span>
-                  {/* The Drag Handle */}
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="day-name" style={{ fontWeight: 'bold' }}>{day.name}</span>
+                  
+                  {/* Drag Handle - Optimized for Touch */}
                   <div 
                     className="drag-handle" 
-                    style={{ cursor: 'grab', touchAction: 'none' }}
                     onPointerDown={(e) => controls.start(e)}
+                    style={{ 
+                      cursor: 'grab', 
+                      touchAction: 'none', 
+                      padding: '10px', // Larger hit area for mobile
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      color: getTypeColor(day.type)
+                    }}
                   >
-                    <ChevronDown size={16} />
-                    <ChevronUp size={16} />
+                    <ChevronUp size={18} />
+                    <ChevronDown size={18} />
                   </div>
                 </div>
 
-                <div className="card-type">
+                <div className="card-type" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0' }}>
                   {getIcon(day.type)}
                   <span>{day.type}</span>
                 </div>
 
                 {day.type === 'Hiking' && (
-                  <div className="miles-input">
+                  <div className="miles-input" style={{ marginBottom: '0.5rem' }}>
                     <MapPin size={14} />
                     <input 
                       type="number"
-                      placeholder="Miles"
                       value={day.miles || ''}
                       onChange={(e) => updateDayMiles(day.id, Number(e.target.value))}
-                      min="0.5"
-                      max="20"
-                      step="0.1"
+                      style={{ width: '60px', marginLeft: '0.5rem' }}
+                      placeholder="Mi"
                     />
                   </div>
                 )}
 
-                <div className="card-stats">
+                <div className="card-stats" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                   <span className="calories">
-                    <Flame size={14} color="#e94560" />
-                    {calculateCalories(day).toLocaleString()} kcal
+                    <Flame size={14} color="#e94560" /> {calculateCalories(day)} kcal
                   </span>
                   {day.type !== 'Rest' && (
-                    <span className="duration">
-                      {day.type === 'Lifting' ? '60 min' : `${(day.miles || 0) * 20} min`}
-                    </span>
+                    <span>{day.type === 'Lifting' ? '60m' : `${(day.miles || 0) * 20}m`}</span>
                   )}
                 </div>
               </Reorder.Item>
