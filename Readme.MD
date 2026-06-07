@@ -19,6 +19,14 @@ This project was developed using a specialized AI-driven workflow:
 * **Aiden:** Used for high-level architectural guidance and feature orchestration.
 * **Qwen3.5-35B:** The primary large language model utilized for generating robust, type-safe React code and implementing complex logic for drag-and-drop interactions.
 
+## 📱 Android App
+
+This project is ready to be built as an Android application using **Capacitor**.
+* **Automated Builds:** A GitHub Action is configured to build and sign the APK on every new version tag (`v*`).
+* **Manual Build:** Run `npx cap open android` to open the project in Android Studio.
+
+See [ANDROID_RELEASE_SETUP.md](./ANDROID_RELEASE_SETUP.md) for instructions on setting up automated signing.
+
 ## 💻 Tech Stack
 
 * **Framework:** [React](https://reactjs.org/)
