@@ -33,10 +33,26 @@ const DAYS_OF_WEEK = [
 
 // MET values mapped by activity type and intensity level based on ACSM standards
 const INTENSITY_METS: Record<WorkoutType, Record<Intensity, number>> = {
-  Lifting: { Leisurely: 4.0, Moderate: 5.0, Vigorous: 6.5, Extreme: 8.0 },
-  Hiking: { Leisurely: 3.5, Moderate: 5.0, Vigorous: 7.0, Extreme: 9.0 },
-  Bicycling: { Leisurely: 4.0, Moderate: 6.0, Vigorous: 8.0, Extreme: 10.0 },
-  Rest: { Leisurely: 1.2, Moderate: 1.2, Vigorous: 1.2, Extreme: 1.2 }
+  Lifting: { Leisurely: 3.5, Moderate: 5.0, Vigorous: 6.0, Extreme: 8.0 },
+  Hiking: { Leisurely: 3.5, Moderate: 5.5, Vigorous: 7.5, Extreme: 9.5 },
+  Bicycling: { Leisurely: 4.0, Moderate: 8.0, Vigorous: 10.0, Extreme: 12.0 },
+  Rest: { Leisurely: 1.0, Moderate: 1.0, Vigorous: 1.0, Extreme: 1.0 }
+}
+
+// Pace mapping: minutes per mile based on intensity
+const PACE_MAP: Record<'Hiking' | 'Bicycling', Record<Intensity, number>> = {
+  Hiking: {
+    Leisurely: 30, // 2.0 mph
+    Moderate: 20,   // 3.0 mph
+    Vigorous: 15,   // 4.0 mph
+    Extreme: 12     // 5.0 mph
+  },
+  Bicycling: {
+    Leisurely: 6,   // 10 mph
+    Moderate: 4.5, // 13.3 mph
+    Vigorous: 4,   // 15 mph
+    Extreme: 3     // 20 mph
+  }
 }
 
 // Extracted component to fix React hook rules violation (hooks cannot be called inside loops)
@@ -189,10 +205,13 @@ function WorkoutItem({
 
 function App() {
   const [weight, setWeight] = useState<number | ''>(80) // Allow empty string for clearing
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true) // Default to collapsed on mobile
   const [isDarkTheme, setIsDarkTheme] = useState(true)
   const [activeTab, setActiveTab] = useState<'schedule' | 'nutrition'>('schedule')
-  
+
+  // Basic mobile detection
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   // Updated all default workouts to Rest
   const [workouts, setWorkouts] = useState<Workout[]>([
     { id: 'w1', type: 'Rest' },
@@ -206,21 +225,31 @@ function App() {
 
   // MET (Metabolic Equivalent of Task) values represent energy cost per minute.
   const calculateCalories = (workout: Workout): number => {
-    if (workout.type === 'Rest') return 0
-    
-    const intensity = workout.intensity || 'Moderate';
-    let met = INTENSITY_METS[workout.type][intensity];
+    if (workout.type === 'Rest') return 0;
 
-    // Use explicit durationMinutes, fallback to calculated estimate from miles for hiking/biking
-    let duration = workout.durationMinutes || 60
-    if (!workout.durationMinutes && (workout.type === 'Hiking' || workout.type === 'Bicycling')) {
-      duration = (workout.miles || 0) * 20 // ~3mph hike or ~15mph bike pace estimate
+    const weightNum = Number(weight) || 0;
+    const intensity = workout.intensity || 'Moderate';
+    const restMet = 1.0;
+
+    let workoutDuration = 0;
+    let workoutMet = INTENSITY_METS[workout.type][intensity];
+
+    // Determine workout duration
+    if (workout.durationMinutes) {
+      workoutDuration = workout.durationMinutes;
+    } else if (workout.miles) {
+      const pace = PACE_MAP[workout.type as 'Hiking' | 'Bicycling'][intensity];
+      workoutDuration = workout.miles * pace;
+    } else {
+      workoutDuration = 60; // Default 60m for Lifting
     }
 
-    // ACSM Formula: Calories Burned = MET × 3.5 × (Weight_kg / 200) × Duration_min
-    const weightNum = Number(weight) || 0;
-    const caloriesBurned = ((met * 3.5 * weightNum) / 200) * duration;
-    return Math.round(caloriesBurned);
+    // ACSM Formula for Net Calories (Additional burn above resting):
+    // (Workout MET - Rest MET) * 3.5 * Weight_kg * Duration_min / 200
+    const netMet = Math.max(0, workoutMet - restMet);
+    const netBurn = (netMet * 3.5 * weightNum * workoutDuration) / 200;
+
+    return Math.round(netBurn);
   }
 
   const weeklyTotal = workouts.reduce((sum, workout) => sum + calculateCalories(workout), 0)
@@ -228,7 +257,16 @@ function App() {
   const handleReorder = (newWorkouts: Workout[]) => setWorkouts(newWorkouts)
   
   const updateWorkout = (id: string, updates: Partial<Workout>) => {
-    setWorkouts(workouts.map(w => w.id === id ? { ...w, ...updates } : w))
+    setWorkouts(workouts.map(w => {
+      if (w.id === id) {
+        // If type is changing, clear the input values to prevent "60 mins" becoming "60 miles"
+        if (updates.type && updates.type !== w.type) {
+          return { ...w, ...updates, miles: undefined, durationMinutes: undefined };
+        }
+        return { ...w, ...updates };
+      }
+      return w;
+    }))
   }
 
   const getIcon = (type: WorkoutType) => {
@@ -259,42 +297,60 @@ function App() {
 
   return (
     <div className="app-container" style={{ background: themeColors.bg, minHeight: '100vh', color: themeColors.text, transition: 'background-color 0.3s ease, color 0.3s ease' }}>
-      {/* Utility Buttons */}
-      <div className="controls-overlay" style={{ position: 'fixed', top: '1rem', right: 'calc(1rem + 0.5in)', zIndex: 100, display: 'flex', gap: '0.5rem' }}>
-        <button className="theme-toggle" onClick={() => setIsDarkTheme(!isDarkTheme)} style={{ padding: '8px', borderRadius: '8px', cursor: 'pointer', background: themeColors.cardBg, border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease', color: themeColors.text }}>
-          {isDarkTheme ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
-        <button 
-          className="sidebar-toggle"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          style={{ padding: '8px', borderRadius: '8px', cursor: 'pointer', background: themeColors.cardBg, border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease', color: themeColors.text }}
-        >
-          {sidebarCollapsed ? <Menu size={24} /> : <X size={24} />}
-        </button>
-      </div>
-
       {/* Sidebar */}
-      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ padding: '1rem', borderRight: `1px solid ${themeColors.border}`, background: themeColors.cardBg, height: '100vh', position: 'fixed', left: 0, top: 0, width: sidebarCollapsed ? '60px' : '250px', transition: 'width 0.3s ease, background-color 0.3s ease', overflowY: 'auto' }}>
-        <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-          <Flame size={32} color="#e94560" />
-          {!sidebarCollapsed && <h1>Workout Shuffle</h1>}
+      <aside
+        className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}
+        style={{
+          padding: '1rem',
+          borderRight: `1px solid ${themeColors.border}`,
+          background: themeColors.cardBg,
+          height: '100vh',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          width: sidebarCollapsed ? (isMobile ? '0px' : '60px') : '250px',
+          transition: 'width 0.3s ease, background-color 0.3s ease',
+          overflowY: 'auto',
+          zIndex: 1000,
+          display: isMobile && sidebarCollapsed ? 'none' : 'block'
+        }}
+      >
+        <div className="logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Flame size={32} color="#e94560" />
+            {!sidebarCollapsed && <h1>Workout Shuffle</h1>}
+          </div>
+          {!sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: themeColors.text,
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+            >
+              <X size={24} />
+            </button>
+          )}
         </div>
 
         <div className="weight-input" style={{ marginBottom: '2rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Weight (kg)</label>
+          <label style={{ display: 'block', marginBottom: '0.5rem', color: isDarkTheme ? themeColors.text : '#000', fontWeight: isDarkTheme ? 400 : 600 }}>Weight (kg)</label>
           <input 
             type="number" 
             value={weight === '' ? '' : weight} // Allow empty string for clearing
             onChange={(e) => setWeight(e.target.value === '' ? '' as any : Number(e.target.value))}
-            style={{ width: '100%', padding: '8px', borderRadius: '4px', background: themeColors.inputBg, color: 'inherit', border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease' }}
+            style={{ width: '100%', padding: '8px', borderRadius: '4px', background: themeColors.inputBg, color: isDarkTheme ? themeColors.text : '#000', border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease' }}
           />
         </div>
 
         <div className="summary">
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Weekly Total</h2>
-          <div className="total-calories" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', padding: '0.6rem', background: isDarkTheme ? '#2a2a3e' : '#f8f9fa', borderRadius: '6px', borderLeft: `3px solid #555` }}>
-            <Flame size={24} color="#555" />
-            {!sidebarCollapsed && <span style={{ color: themeColors.text }}>{weeklyTotal.toLocaleString()} kcal</span>}
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: isDarkTheme ? themeColors.text : '#000', fontWeight: isDarkTheme ? 400 : 700 }}>Weekly Total</h2>
+          <div className="total-calories" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', padding: '0.6rem', background: isDarkTheme ? '#2a2a3e' : '#e2e8f0', borderRadius: '6px', borderLeft: `3px solid ${isDarkTheme ? '#555' : '#000'}` }}>
+            <Flame size={24} color={isDarkTheme ? "#555" : "#000"} />
+            {!sidebarCollapsed && <span style={{ color: isDarkTheme ? themeColors.text : '#000' }}>{weeklyTotal.toLocaleString()} kcal</span>}
           </div>
 
           {/* Daily Nutrition Breakdown */}
@@ -302,19 +358,20 @@ function App() {
             <div style={{ marginTop: '1rem' }}>
               <h3 style={{ fontSize: '0.9rem', marginBottom: '0.75rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '1px' }}>Daily Targets</h3>
               {workouts.map((w, i) => {
-                const burn = calculateCalories(w);
-                if (burn === 0) return null;
-                
-                // Calculate pre/post load recommendations based on workout intensity/type
-                const preLoad = Math.round(burn * 0.3); // ~30% before workout
-                const postLoad = Math.round(burn * 0.4); // ~40% after workout
+                const activeBurn = calculateCalories(w);
+
+                if (activeBurn === 0) return null;
+
+                // Calculate pre/post load recommendations based on ACTIVE burn
+                const preLoad = Math.round(activeBurn * 0.3);
+                const postLoad = Math.round(activeBurn * 0.4);
                 
                 return (
-                  <div key={w.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: isDarkTheme ? '#2a2a3e' : '#f8f9fa', borderRadius: '6px', borderLeft: `3px solid ${getTypeColor(w.type)}` }}>
+                  <div key={w.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: isDarkTheme ? '#2a2a3e' : '#e2e8f0', borderRadius: '6px', borderLeft: `3px solid ${getTypeColor(w.type)}` }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem', color: themeColors.text }}>{DAYS_OF_WEEK[i]} ({w.type})</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', opacity: 0.85 }}>
-                      <span style={{ color: '#3b82f6' }}>Pre-load: {preLoad} kcal</span>
-                      <span style={{ color: '#10b981' }}>Post-load: {postLoad} kcal</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', opacity: isDarkTheme ? 0.85 : 1.0 }}>
+                      <span style={{ color: isDarkTheme ? '#3b82f6' : '#2563eb', fontWeight: isDarkTheme ? 400 : 600 }}>Pre-load: {preLoad} kcal</span>
+                      <span style={{ color: isDarkTheme ? '#10b981' : '#059669', fontWeight: isDarkTheme ? 400 : 600 }}>Post-load: {postLoad} kcal</span>
                     </div>
                   </div>
                 );
@@ -328,29 +385,30 @@ function App() {
       <main 
         className={`main-content ${sidebarCollapsed ? 'expanded' : ''}`}
         style={{ 
-          padding: '1rem',
-          maxWidth: '600px',
-          margin: '0 auto',
+          padding: '1rem 0', // Removed horizontal padding to allow cards to go wider
+          maxWidth: '100%',
+          margin: '0', // Align to left
           touchAction: 'pan-y',
-          marginLeft: sidebarCollapsed ? '70px' : '260px',
+          marginLeft: isMobile ? '0' : (sidebarCollapsed ? '70px' : '260px'),
           transition: 'margin-left 0.3s ease, background-color 0.3s ease',
           backgroundColor: themeColors.bg // Explicitly set to ensure it updates with theme toggle
         }}
       >
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: `1px solid ${themeColors.border}`, paddingBottom: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: `1px solid ${themeColors.border}`, paddingBottom: '0.5rem', paddingLeft: '1rem', paddingRight: '1rem', overflowX: 'auto', whiteSpace: 'nowrap' }}>
           <button 
             onClick={() => setActiveTab('schedule')}
             style={{ 
               background: activeTab === 'schedule' ? themeColors.cardBg : 'transparent', 
               border: 'none', 
-              padding: '8px 16px', 
+              padding: '8px 12px',
               borderRadius: '6px', 
               cursor: 'pointer', 
               fontWeight: activeTab === 'schedule' ? 'bold' : 'normal',
               color: activeTab === 'schedule' ? '#e94560' : themeColors.text,
               boxShadow: activeTab === 'schedule' ? `0 2px 4px rgba(0,0,0,${isDarkTheme ? 0.3 : 0.1})` : 'none',
-              transition: 'background-color 0.3s ease, color 0.3s ease'
+              transition: 'background-color 0.3s ease, color 0.3s ease',
+              fontSize: '0.9rem'
             }}
           >
             Schedule
@@ -360,22 +418,43 @@ function App() {
             style={{ 
               background: activeTab === 'nutrition' ? themeColors.cardBg : 'transparent', 
               border: 'none', 
-              padding: '8px 16px', 
+              padding: '8px 12px',
               borderRadius: '6px', 
               cursor: 'pointer', 
               fontWeight: activeTab === 'nutrition' ? 'bold' : 'normal',
               color: activeTab === 'nutrition' ? '#e94560' : themeColors.text,
               boxShadow: activeTab === 'nutrition' ? `0 2px 4px rgba(0,0,0,${isDarkTheme ? 0.3 : 0.1})` : 'none',
-              transition: 'background-color 0.3s ease, color 0.3s ease'
+              transition: 'background-color 0.3s ease, color 0.3s ease',
+              fontSize: '0.9rem'
             }}
           >
             Nutrition & Instructions
           </button>
         </div>
 
+        {/* Utility Buttons - Moved below tabs */}
+        <div className="controls-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', paddingLeft: '1rem', paddingRight: '1rem' }}>
+          <button
+            className="theme-toggle"
+            onClick={() => setIsDarkTheme(!isDarkTheme)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', background: themeColors.cardBg, border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease', color: themeColors.text, fontSize: '0.8rem' }}
+          >
+            {isDarkTheme ? <Sun size={16} /> : <Moon size={16} />}
+            {isDarkTheme ? 'Light Mode' : 'Dark Mode'}
+          </button>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', background: themeColors.cardBg, border: `1px solid ${themeColors.border}`, transition: 'background-color 0.3s ease', color: themeColors.text, fontSize: '0.8rem' }}
+          >
+            <Menu size={16} />
+            Stats & Weight
+          </button>
+        </div>
+
         {activeTab === 'schedule' && (
           <>
-            <header className="toolbar" style={{ marginBottom: '2rem' }}>
+            <header className="toolbar" style={{ marginBottom: '2rem', paddingLeft: '1rem', paddingRight: '1rem' }}>
               <h2>Weekly Schedule</h2>
               <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Use handles to drag workouts across days</p>
             </header>
@@ -385,7 +464,7 @@ function App() {
               values={workouts} 
               onReorder={handleReorder}
               className="days-list"
-              style={{ listStyle: 'none', padding: 0 }}
+              style={{ listStyle: 'none', padding: '0 0.5rem' }} // Minimal padding for cards
             >
               {workouts.map((workout, index) => (
                 <WorkoutItem 
@@ -453,24 +532,24 @@ function App() {
               <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: themeColors.text }}>📐 Formulas & Calculations</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div style={{ padding: '0.6rem', background: isDarkTheme ? '#1a1a2e' : '#ffffff', borderRadius: '6px', border: `1px solid ${themeColors.border}` }}>
-                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Calorie Burn (MET Formula)</strong>
-                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>MET × 3.5 × (Weight_kg / 200) × Duration_min</code>
+                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Net Active Calorie Burn</strong>
+                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>(MET - 1.0) × 3.5 × (Weight_kg / 200) × Duration_min</code>
                 </div>
                 <div style={{ padding: '0.6rem', background: isDarkTheme ? '#1a1a2e' : '#ffffff', borderRadius: '6px', border: `1px solid ${themeColors.border}` }}>
-                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Total Workout Calories</strong>
-                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>Calories Burned (rounded)</code>
+                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Additional Daily Intake</strong>
+                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>Total Net Calories (rounded)</code>
                 </div>
                 <div style={{ padding: '0.6rem', background: isDarkTheme ? '#1a1a2e' : '#ffffff', borderRadius: '6px', border: `1px solid ${themeColors.border}` }}>
-                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Pre-Workout Load</strong>
-                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>~30% of Total Burn (1-2 hrs before)</code>
+                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Pre-Workout Fueling</strong>
+                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>~30% of Net Burn (1-2 hrs before)</code>
                 </div>
                 <div style={{ padding: '0.6rem', background: isDarkTheme ? '#1a1a2e' : '#ffffff', borderRadius: '6px', border: `1px solid ${themeColors.border}` }}>
-                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Post-Workout Load</strong>
-                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>~40% of Total Burn (within 60 mins after)</code>
+                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Post-Workout Recovery</strong>
+                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>~40% of Net Burn (within 60 mins after)</code>
                 </div>
                 <div style={{ padding: '0.6rem', background: isDarkTheme ? '#1a1a2e' : '#ffffff', borderRadius: '6px', border: `1px solid ${themeColors.border}` }}>
-                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Weekly Total</strong>
-                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>Sum of all daily workout calories</code>
+                  <strong style={{ display: 'block', marginBottom: '0.3rem', color: themeColors.text }}>Weekly Active Total</strong>
+                  <code style={{ fontSize: '0.85rem', opacity: 0.9 }}>Sum of all daily Net Active Calories</code>
                 </div>
               </div>
             </div>
