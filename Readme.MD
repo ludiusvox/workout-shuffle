@@ -42,3 +42,5 @@ See [ANDROID_RELEASE_SETUP.md](./ANDROID_RELEASE_SETUP.md) for instructions on s
 
 ---
 *Created as a high-performance fitness utility with a focus on active calorie management.*
+
+I am including this icon with words on it to build a machine for caloric loading and preloading.
