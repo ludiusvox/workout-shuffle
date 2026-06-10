@@ -1,0 +1,4 @@
+#Tue Jun 09 20:55:59 EDT 2026
+base.0=C\:\\repositories\\workout-shuffle\\android\\app\\build\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
+path.0=classes.dex
+renamed.0=classes.dex
