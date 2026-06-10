@@ -1,9 +1,0 @@
-com.workout.shuffle.app-pngs-0 C:\repositories\workout-shuffle\android\app\build\generated\res\pngs\release
-com.workout.shuffle.app-resValues-1 C:\repositories\workout-shuffle\android\app\build\generated\res\resValues\release
-com.workout.shuffle.app-updated_navigation_xml-2 C:\repositories\workout-shuffle\android\app\build\generated\updated_navigation_xml\release
-com.workout.shuffle.app-packageReleaseResources-3 C:\repositories\workout-shuffle\android\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
-com.workout.shuffle.app-packageReleaseResources-4 C:\repositories\workout-shuffle\android\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
-com.workout.shuffle.app-release-5 C:\repositories\workout-shuffle\android\app\build\intermediates\merged_res\release\mergeReleaseResources
-com.workout.shuffle.app-main-6 C:\repositories\workout-shuffle\android\app\src\main\res
-com.workout.shuffle.app-release-7 C:\repositories\workout-shuffle\android\app\src\release\res
-gradleHome-0 C:\Users\Aaron\.gradle
